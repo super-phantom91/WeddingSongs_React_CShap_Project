@@ -348,50 +348,16 @@ body {
   display: flex;
   gap: 16px;
   justify-content: center;
-  position: relative;
 }
 
 .treeRow--split {
   justify-content: center;
   gap: 22px;
-  padding-top: 26px;
 }
 
 .treeRow--split > * {
   flex: 1;
   max-width: 250px;
-}
-
-.treeRow--split::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 1.5px;
-  height: 18px;
-  background: #b6bdc8;
-  transform: translateX(-50%);
-}
-
-.treeRow--split::after {
-  content: "";
-  position: absolute;
-  left: calc(25% + 8px);
-  right: calc(25% + 8px);
-  top: 18px;
-  border-top: 1.5px solid #b6bdc8;
-  border-radius: 999px;
-}
-
-.treeRow--split > .tree-card::before {
-  content: "";
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  width: 1.5px;
-  height: 8px;
-  background: #b6bdc8;
-  transform: translateX(-50%);
 }
 
 .treeRow--quad {
@@ -401,52 +367,6 @@ body {
   max-width: 522px;
   margin: 0 auto;
   width: 100%;
-  padding-top: 26px;
-}
-
-.treeRow--quad::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: 1.5px;
-  height: 18px;
-  background: #b6bdc8;
-}
-
-.treeRow--quad::after {
-  content: "";
-  position: absolute;
-  top: 18px;
-  width: 50%;
-  border-top: 1.5px solid #b6bdc8;
-  border-radius: 999px;
-}
-
-.treeRow--quad.treeRow--from-left::before {
-  left: 25%;
-}
-
-.treeRow--quad.treeRow--from-left::after {
-  left: 25%;
-}
-
-.treeRow--quad.treeRow--from-right::before {
-  left: 75%;
-}
-
-.treeRow--quad.treeRow--from-right::after {
-  left: 25%;
-}
-
-.treeRow--quad > .tree-card::before {
-  content: "";
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  width: 1.5px;
-  height: 8px;
-  background: #b6bdc8;
-  transform: translateX(-50%);
 }
 
 .treeRow--center > * {
@@ -461,7 +381,6 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   box-shadow: none;
-  position: relative;
 }
 
 .tree-card.bride {

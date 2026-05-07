@@ -550,7 +550,7 @@ export function NewWeddingPage() {
                     />
                   ) : null}
                 </div>
-                <div className="treeRow treeRow--quad treeRow--from-left">
+                <div className="treeRow treeRow--quad">
                   {[WeddingRole.PaternalGrandfatherGroom, WeddingRole.PaternalGrandmotherGroom].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -571,7 +571,7 @@ export function NewWeddingPage() {
                     ) : null,
                   )}
                 </div>
-                <div className="treeRow treeRow--quad treeRow--from-right">
+                <div className="treeRow treeRow--quad">
                   {[WeddingRole.MaternalGrandfatherGroom, WeddingRole.MaternalGrandmotherGroom].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -649,7 +649,7 @@ export function NewWeddingPage() {
                     />
                   ) : null}
                 </div>
-                <div className="treeRow treeRow--quad treeRow--from-left">
+                <div className="treeRow treeRow--quad">
                   {[WeddingRole.MaternalGrandfatherBride, WeddingRole.MaternalGrandmotherBride].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -670,7 +670,7 @@ export function NewWeddingPage() {
                     ) : null,
                   )}
                 </div>
-                <div className="treeRow treeRow--quad treeRow--from-right">
+                <div className="treeRow treeRow--quad">
                   {[WeddingRole.PaternalGrandfatherBride, WeddingRole.PaternalGrandmotherBride].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
