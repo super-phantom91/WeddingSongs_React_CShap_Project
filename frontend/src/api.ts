@@ -62,8 +62,17 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function createWeddingDraft(): Promise<WeddingLineageDto> {
-  const res = await fetch("/api/weddings", { method: "POST" });
+export async function createWedding(body: {
+  groomFamilyName: string;
+  brideFamilyName: string;
+  weddingDate: string;
+  assignments: { role: WeddingRoleValue; personId: number | null; displayName: string }[];
+}): Promise<WeddingLineageDto> {
+  const res = await fetch("/api/weddings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   return json<WeddingLineageDto>(res);
 }
 

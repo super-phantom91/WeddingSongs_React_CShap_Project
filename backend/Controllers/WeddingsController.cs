@@ -15,29 +15,18 @@ public class WeddingsController(WeddingDbContext db) : ControllerBase
         $"{groomFamily.Trim()} - {brideFamily.Trim()} - {date:yyyy-MM-dd}";
 
     [HttpPost]
-    public async Task<ActionResult<WeddingLineageDto>> CreateDraft(CancellationToken ct)
+    public async Task<ActionResult<WeddingLineageDto>> Create([FromBody] CreateWeddingRequest body, CancellationToken ct)
     {
         var wedding = new Wedding
         {
-            GroomFamilyName = "",
-            BrideFamilyName = "",
-            WeddingDate = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+            GroomFamilyName = body.GroomFamilyName?.Trim() ?? "",
+            BrideFamilyName = body.BrideFamilyName?.Trim() ?? "",
+            WeddingDate = body.WeddingDate,
             CreatedAtUtc = DateTime.UtcNow,
             Status = "Draft",
         };
         db.Weddings.Add(wedding);
-        await db.SaveChangesAsync(ct);
-
-        foreach (WeddingRole role in Enum.GetValues<WeddingRole>())
-        {
-            db.WeddingRoleAssignments.Add(new WeddingRoleAssignment
-            {
-                WeddingId = wedding.Id,
-                RoleCode = role,
-                PersonId = null,
-                DisplayName = "",
-            });
-        }
+        ApplyAssignments(wedding, body.Assignments ?? Array.Empty<LineageAssignmentDto>());
         await db.SaveChangesAsync(ct);
 
         return CreatedAtAction(nameof(Get), new { id = wedding.Id }, await LoadLineageDto(wedding.Id, ct));
@@ -74,18 +63,35 @@ public class WeddingsController(WeddingDbContext db) : ControllerBase
         if (wedding is null)
             return NotFound();
 
-        var assignments = body.Assignments ?? Array.Empty<LineageAssignmentDto>();
-
-        foreach (var a in assignments)
-        {
-            var slot = wedding.RoleAssignments.FirstOrDefault(r => r.RoleCode == a.Role);
-            if (slot is null)
-                continue;
-            slot.PersonId = a.PersonId;
-            slot.DisplayName = (a.DisplayName ?? "").Trim();
-        }
+        ApplyAssignments(wedding, body.Assignments ?? Array.Empty<LineageAssignmentDto>());
         await db.SaveChangesAsync(ct);
         return Ok(await LoadLineageDto(id, ct));
+    }
+
+    private static void ApplyAssignments(Wedding wedding, IReadOnlyList<LineageAssignmentDto> assignments)
+    {
+        var incoming = new Dictionary<WeddingRole, LineageAssignmentDto>();
+        foreach (var a in assignments)
+            incoming[a.Role] = a;
+
+        foreach (WeddingRole role in Enum.GetValues<WeddingRole>())
+        {
+            incoming.TryGetValue(role, out var source);
+            var slot = wedding.RoleAssignments.FirstOrDefault(r => r.RoleCode == role);
+            if (slot is null)
+            {
+                wedding.RoleAssignments.Add(new WeddingRoleAssignment
+                {
+                    RoleCode = role,
+                    PersonId = source?.PersonId,
+                    DisplayName = source?.DisplayName?.Trim() ?? "",
+                });
+                continue;
+            }
+
+            slot.PersonId = source?.PersonId;
+            slot.DisplayName = source?.DisplayName?.Trim() ?? "";
+        }
     }
 
     private async Task<WeddingLineageDto?> LoadLineageDto(int weddingId, CancellationToken ct)

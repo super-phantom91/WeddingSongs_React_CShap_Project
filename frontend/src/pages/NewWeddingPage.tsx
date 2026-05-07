@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import {
-  createWeddingDraft,
+  createWedding,
   getPersonHints,
   getWedding,
   searchPeople,
@@ -30,6 +30,44 @@ function slotFromDto(s: WeddingLineageSlotDto): SlotDraft {
     label: s.label,
     hasConflict: s.hasConflict,
   };
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes('"status":404') || error.message.includes("404");
+}
+
+const ROLE_LABELS: Record<WeddingRoleValue, string> = {
+  [WeddingRole.Groom]: "GROOM",
+  [WeddingRole.Bride]: "BRIDE",
+  [WeddingRole.FatherOfGroom]: "FATHER OF THE GROOM",
+  [WeddingRole.MotherOfGroom]: "MOTHER OF THE GROOM",
+  [WeddingRole.PaternalGrandfatherGroom]: "PATERNAL GRANDFATHER OF THE GROOM",
+  [WeddingRole.PaternalGrandmotherGroom]: "PATERNAL GRANDMOTHER OF THE GROOM",
+  [WeddingRole.MaternalGrandfatherGroom]: "MATERNAL GRANDFATHER OF THE GROOM",
+  [WeddingRole.MaternalGrandmotherGroom]: "MATERNAL GRANDMOTHER OF THE GROOM",
+  [WeddingRole.FatherOfBride]: "FATHER OF THE BRIDE",
+  [WeddingRole.MotherOfBride]: "MOTHER OF THE BRIDE",
+  [WeddingRole.PaternalGrandfatherBride]: "PATERNAL GRANDFATHER OF THE BRIDE",
+  [WeddingRole.PaternalGrandmotherBride]: "PATERNAL GRANDMOTHER OF THE BRIDE",
+  [WeddingRole.MaternalGrandfatherBride]: "MATERNAL GRANDFATHER OF THE BRIDE",
+  [WeddingRole.MaternalGrandmotherBride]: "MATERNAL GRANDMOTHER OF THE BRIDE",
+};
+
+function emptySlots(): SlotDraft[] {
+  return Object.values(WeddingRole)
+    .sort((a, b) => a - b)
+    .map((role) => ({
+      role,
+      personId: null,
+      displayName: "",
+      label: ROLE_LABELS[role],
+      hasConflict: false,
+    }));
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function applyHintsToSlots(prev: SlotDraft[], role: WeddingRoleValue, hints: Awaited<ReturnType<typeof getPersonHints>>): SlotDraft[] {
@@ -139,21 +177,16 @@ export function NewWeddingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wedding, setWedding] = useState<WeddingLineageDto | null>(null);
-  const [slots, setSlots] = useState<SlotDraft[]>([]);
+  const [slots, setSlots] = useState<SlotDraft[]>(() => emptySlots());
   const [groomFamily, setGroomFamily] = useState("");
   const [brideFamily, setBrideFamily] = useState("");
-  const [weddingDate, setWeddingDate] = useState("");
+  const [weddingDate, setWeddingDate] = useState(() => todayIsoDate());
 
   const [activeRole, setActiveRole] = useState<WeddingRoleValue | null>(null);
   const [queries, setQueries] = useState<Record<number, string>>({});
   const [suggestions, setSuggestions] = useState<Record<number, PersonSummaryDto[]>>({});
 
   const slotByRole = useMemo(() => new Map(slots.map((s) => [s.role, s])), [slots]);
-  const previewTitle = useMemo(
-    () => `${groomFamily.trim()} - ${brideFamily.trim()} - ${weddingDate}`,
-    [groomFamily, brideFamily, weddingDate],
-  );
-
   const load = useCallback(async (id: number) => {
     setError(null);
     const dto = await getWedding(id);
@@ -177,16 +210,13 @@ export function NewWeddingPage() {
         if (idParam) {
           await load(Number(idParam));
         } else {
-          const created = await createWeddingDraft();
-          if (cancelled) return;
-          setParams({ id: String(created.id) }, { replace: true });
-          setWedding(created);
-          setSlots(created.slots.map(slotFromDto));
-          setGroomFamily(created.groomFamilyName);
-          setBrideFamily(created.brideFamilyName);
-          setWeddingDate(created.weddingDate);
+          setWedding(null);
+          setSlots(emptySlots());
+          setGroomFamily("");
+          setBrideFamily("");
+          setWeddingDate(todayIsoDate());
           const q: Record<number, string> = {};
-          for (const s of created.slots) q[s.role] = s.displayName;
+          for (const s of emptySlots()) q[s.role] = s.displayName;
           setQueries(q);
         }
       } catch (e) {
@@ -219,9 +249,8 @@ export function NewWeddingPage() {
     return () => window.clearTimeout(handle);
   }, [activeRole, queries]);
 
-  const persistMeta = async () => {
-    if (!wedding) return;
-    const dto = await updateWeddingMeta(wedding.id, {
+  const persistMeta = async (weddingId: number) => {
+    const dto = await updateWeddingMeta(weddingId, {
       groomFamilyName: groomFamily,
       brideFamilyName: brideFamily,
       weddingDate,
@@ -229,19 +258,27 @@ export function NewWeddingPage() {
     setWedding(dto);
   };
 
-  const persistLineage = async (nextSlots: SlotDraft[]) => {
-    if (!wedding) return;
-    const dto = await updateLineage(
-      wedding.id,
-      nextSlots.map((s) => ({ role: s.role, personId: s.personId, displayName: s.displayName })),
-    );
-    setWedding(dto);
-    setSlots(dto.slots.map(slotFromDto));
-    setQueries((prev) => {
-      const n = { ...prev };
-      for (const s of dto.slots) n[s.role] = s.displayName;
-      return n;
-    });
+  const persistLineage = async (weddingId: number, nextSlots: SlotDraft[]) => {
+    try {
+      const dto = await updateLineage(
+        weddingId,
+        nextSlots.map((s) => ({ role: s.role, personId: s.personId, displayName: s.displayName })),
+      );
+      setWedding(dto);
+      setSlots(dto.slots.map(slotFromDto));
+      setQueries((prev) => {
+        const n = { ...prev };
+        for (const s of dto.slots) n[s.role] = s.displayName;
+        return n;
+      });
+      setError(null);
+    } catch (e) {
+      if (isNotFoundError(e)) {
+        setError("This wedding was not found anymore. Please click '+ New wedding' to create a fresh draft.");
+        return;
+      }
+      throw e;
+    }
   };
 
   const onPickPerson = async (role: WeddingRoleValue, p: PersonSummaryDto) => {
@@ -262,20 +299,43 @@ export function NewWeddingPage() {
     setSlots(next);
     setSuggestions((s) => ({ ...s, [role]: [] }));
     setActiveRole(null);
-    await persistLineage(next);
+    try {
+      setError(null);
+    } catch {
+      /* save happens on Save button only */
+    }
   };
 
-  const onManualBlurCommit = async (role: WeddingRoleValue) => {
+  const onManualBlurCommit = (role: WeddingRoleValue) => {
     const name = (queries[role] ?? "").trim();
     const next = slots.map((s) => (s.role === role ? { ...s, displayName: name, personId: null } : { ...s }));
     setSlots(next);
-    await persistLineage(next);
   };
 
   const handleSave = async () => {
     try {
-      await persistMeta();
-      await persistLineage(slots);
+      let weddingId = wedding?.id;
+      if (!weddingId) {
+        const created = await createWedding({
+          groomFamilyName: groomFamily,
+          brideFamilyName: brideFamily,
+          weddingDate,
+          assignments: slots.map((s) => ({ role: s.role, personId: s.personId, displayName: s.displayName })),
+        });
+        weddingId = created.id;
+        setWedding(created);
+        setParams({ id: String(created.id) }, { replace: true });
+        setSlots(created.slots.map(slotFromDto));
+        setQueries((prev) => {
+          const n = { ...prev };
+          for (const s of created.slots) n[s.role] = s.displayName;
+          return n;
+        });
+        setError(null);
+        return;
+      }
+      await persistMeta(weddingId);
+      await persistLineage(weddingId, slots);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -283,9 +343,18 @@ export function NewWeddingPage() {
   };
 
   const handleReset = async () => {
-    if (!wedding) return;
     setError(null);
-    await load(wedding.id);
+    if (wedding) {
+      await load(wedding.id);
+      return;
+    }
+    setSlots(emptySlots());
+    setGroomFamily("");
+    setBrideFamily("");
+    setWeddingDate(todayIsoDate());
+    const q: Record<number, string> = {};
+    for (const s of emptySlots()) q[s.role] = s.displayName;
+    setQueries(q);
   };
 
   const groomMain = slotByRole.get(WeddingRole.Groom);
@@ -323,38 +392,73 @@ export function NewWeddingPage() {
     );
   }
 
-  if (!wedding) {
-    return (
-      <div className="shell">
-        <aside className="sidebar" />
-        <main className="main">
-          <div className="muted">Loading…</div>
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar__brand">
-          <div className="sidebar__logo" />
+          <div className="sidebar__logo">
+            <span className="sidebar__brandMark" aria-hidden>
+              ◉
+            </span>
+          </div>
           <div>
             <div className="sidebar__title">Management System</div>
             <div className="sidebar__subtitle">WeddingSong</div>
           </div>
         </div>
         <nav className="sidebar__nav">
-          <div className="sidebar__item">Dashboard</div>
-          <div className="sidebar__item">Song library</div>
-          <div className="sidebar__item sidebar__item--active">Wedding Events</div>
-          <div className="sidebar__item">Event Folder</div>
+          <NavLink to="/dashboard" className={({ isActive }) => `sidebar__item${isActive ? " sidebar__item--active" : ""}`}>
+            <span className="sidebar__itemInner">
+              <span className="sidebar__itemIcon" aria-hidden>
+                ◫
+              </span>
+              <span>Dashboard</span>
+            </span>
+          </NavLink>
+          <NavLink to="/song-library" className={({ isActive }) => `sidebar__item${isActive ? " sidebar__item--active" : ""}`}>
+            <span className="sidebar__itemInner">
+              <span className="sidebar__itemIcon" aria-hidden>
+                ♫
+              </span>
+              <span>Song library</span>
+            </span>
+          </NavLink>
+          <NavLink
+            to="/wedding-events"
+            end
+            className={({ isActive }) => `sidebar__item${isActive ? " sidebar__item--active" : ""}`}
+          >
+            <span className="sidebar__itemInner">
+              <span className="sidebar__itemIcon" aria-hidden>
+                ◈
+              </span>
+              <span>Wedding Events</span>
+            </span>
+          </NavLink>
+          <NavLink to="/event-folder" className={({ isActive }) => `sidebar__item${isActive ? " sidebar__item--active" : ""}`}>
+            <span className="sidebar__itemInner">
+              <span className="sidebar__itemIcon" aria-hidden>
+                ⌂
+              </span>
+              <span>Event Folder</span>
+            </span>
+          </NavLink>
         </nav>
-        <button type="button" className="sidebar__cta">
-          + New wedding
-        </button>
         <div className="sidebar__spacer" />
-        <div className="sidebar__item">Settings</div>
+        <NavLink
+          to="/wedding-events/new-wedding"
+          className={({ isActive }) => `sidebar__cta${isActive ? " sidebar__cta--active" : ""}`}
+        >
+          + New wedding
+        </NavLink>
+        <NavLink to="/settings" className={({ isActive }) => `sidebar__item${isActive ? " sidebar__item--active" : ""}`}>
+          <span className="sidebar__itemInner">
+            <span className="sidebar__itemIcon" aria-hidden>
+              ⚙
+            </span>
+            <span>Settings</span>
+          </span>
+        </NavLink>
       </aside>
 
       <div className="content">
@@ -373,34 +477,19 @@ export function NewWeddingPage() {
 
         <main className="main">
           <div className="pageHead">
-            <div>
-              <h1 className="h1">Create New wedding</h1>
-              <p className="lede">Define the lineage for the formal order for the song arrangements.</p>
-              <div className="metaRow">
-                <label className="field">
-                  <span>Groom family name</span>
-                  <input value={groomFamily} onChange={(e) => setGroomFamily(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Bride family name</span>
-                  <input value={brideFamily} onChange={(e) => setBrideFamily(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Wedding date</span>
-                  <input type="date" value={weddingDate} onChange={(e) => setWeddingDate(e.target.value)} />
-                </label>
+            <div className="pageHead__top">
+              <div>
+                <h1 className="h1">Create New wedding</h1>
+                <p className="lede">Define the lineage for the formal order for the song arrangements.</p>
               </div>
-              <div className="titlePreview">
-                <span className="muted">Title:</span> <strong>{previewTitle}</strong>
+              <div className="pageHead__actions">
+                <button type="button" className="btn btn--primary" onClick={handleSave}>
+                  Save &amp; Continue to Add Songs →
+                </button>
+                <button type="button" className="btn btn--ghost" onClick={handleReset}>
+                  ↺ Reset
+                </button>
               </div>
-            </div>
-            <div className="pageHead__actions">
-              <button type="button" className="btn btn--ghost" onClick={handleReset}>
-                ↺ Reset
-              </button>
-              <button type="button" className="btn btn--primary" onClick={handleSave}>
-                Save &amp; Continue to Add Songs →
-              </button>
             </div>
           </div>
 
@@ -461,7 +550,7 @@ export function NewWeddingPage() {
                     />
                   ) : null}
                 </div>
-                <div className="treeRow treeRow--quad">
+                <div className="treeRow treeRow--quad treeRow--from-left">
                   {[WeddingRole.PaternalGrandfatherGroom, WeddingRole.PaternalGrandmotherGroom].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -482,7 +571,7 @@ export function NewWeddingPage() {
                     ) : null,
                   )}
                 </div>
-                <div className="treeRow treeRow--quad">
+                <div className="treeRow treeRow--quad treeRow--from-right">
                   {[WeddingRole.MaternalGrandfatherGroom, WeddingRole.MaternalGrandmotherGroom].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -503,7 +592,7 @@ export function NewWeddingPage() {
                     ) : null,
                   )}
                 </div>
-              </div>
+            </div>
 
               <div className="treeDivider" />
 
@@ -560,7 +649,7 @@ export function NewWeddingPage() {
                     />
                   ) : null}
                 </div>
-                <div className="treeRow treeRow--quad">
+                <div className="treeRow treeRow--quad treeRow--from-left">
                   {[WeddingRole.MaternalGrandfatherBride, WeddingRole.MaternalGrandmotherBride].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard
@@ -581,7 +670,7 @@ export function NewWeddingPage() {
                     ) : null,
                   )}
                 </div>
-                <div className="treeRow treeRow--quad">
+                <div className="treeRow treeRow--quad treeRow--from-right">
                   {[WeddingRole.PaternalGrandfatherBride, WeddingRole.PaternalGrandmotherBride].map((r) =>
                     slotByRole.get(r) ? (
                       <TreeCard

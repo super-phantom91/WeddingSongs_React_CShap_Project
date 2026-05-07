@@ -27,3 +27,9 @@ public record UpdateLineageRequest(IReadOnlyList<LineageAssignmentDto> Assignmen
 public record LineageAssignmentDto(WeddingRole Role, int? PersonId, string DisplayName);
 
 public record WeddingMetaDto(string GroomFamilyName, string BrideFamilyName, DateOnly WeddingDate);
+
+public record CreateWeddingRequest(
+    string GroomFamilyName,
+    string BrideFamilyName,
+    DateOnly WeddingDate,
+    IReadOnlyList<LineageAssignmentDto> Assignments);
